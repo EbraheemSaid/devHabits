@@ -22,7 +22,6 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
         var habitsCollectionDto = new HabitsCollectionDto { Data = habits };
         return Ok(habitsCollectionDto);
     }
-
     [HttpGet("{id}")]
     public async Task<ActionResult<HabitDto>> GetHabitById(string id)
     {
@@ -40,7 +39,6 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
         return Ok(habit);
 
     }
-
     [HttpPost]
     public async Task<ActionResult<HabitDto>> CreateHabit([FromBody] CreateHabitDto createHabitDto)
     {
@@ -54,7 +52,6 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
         return CreatedAtAction(nameof(GetHabitById), new { habitDto.Id }, habitDto);
 
     }
-
     [HttpPut("{id}")]
     public async Task<ActionResult> UpdateHabit([FromRoute] string id, [FromBody] UpdateHabitDto updateHabitDto)
     {
@@ -70,7 +67,6 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
         return NoContent();
 
     }
-
     [HttpPatch("{id}")]
     public async Task<ActionResult> PatchHabit(string id, JsonPatchDocument<HabitDto> patchDocument)
     {
@@ -96,7 +92,6 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
 
         return NoContent();
     }
-
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteHabit(string id)
     {
