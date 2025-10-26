@@ -14,10 +14,19 @@ namespace DevHabit.Api.Controllers;
 public sealed class HabitsController(ApplicationDbContext dbContext) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<HabitsCollectionDto>> GetHabits()
+    public async Task<ActionResult<HabitsCollectionDto>> GetHabits([FromQuery] HabitQueryParams queryParams
+        )
     {
+        queryParams.Search = queryParams.Search?.Trim()?.ToLower();
+
         List<HabitDto> habits = await dbContext
             .Habits
+            .Where(h => queryParams.Search == null ||
+                        h.Name.ToLower().Contains(queryParams.Search) ||
+                        h.Description != null &&
+                        h.Description.ToLower().Contains(queryParams.Search))
+            .Where(h => queryParams.Type == null || h.Type == queryParams.Type)
+            .Where(h => queryParams.Status == null || h.Status == queryParams.Status)
             .Select(HabitQueries.HabitToDtoProjection())
             .ToListAsync();
 
@@ -43,19 +52,10 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
     }
     [HttpPost]
     public async Task<ActionResult<HabitDto>> CreateHabit([FromBody] CreateHabitDto createHabitDto,
-        IValidator<CreateHabitDto> validator,
-        ProblemDetailsFactory problemDetailsFactory)
+        IValidator<CreateHabitDto> validator)
     {
-        var validationResult = await validator.ValidateAsync(createHabitDto);
-        if (!validationResult.IsValid)
-        {
-            ProblemDetails problemDetails = problemDetailsFactory.CreateProblemDetails(
-                HttpContext,
-                StatusCodes.Status400BadRequest
-                );
-            problemDetails.Extensions.Add("errors", validationResult.ToDictionary());
-            return BadRequest(problemDetails);
-        }
+        await validator.ValidateAndThrowAsync(createHabitDto);
+
         var habit = createHabitDto.ToEntity();
 
         await dbContext.Habits.AddAsync(habit);
