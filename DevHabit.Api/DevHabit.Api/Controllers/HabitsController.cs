@@ -16,7 +16,9 @@ using Microsoft.EntityFrameworkCore;
 namespace DevHabit.Api.Controllers;
 [Route("Habits")]
 [ApiController]
-public sealed class HabitsController(ApplicationDbContext dbContext) : ControllerBase
+public sealed class HabitsController(
+    ApplicationDbContext dbContext,
+    LinkService linkService) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetHabits(
@@ -64,7 +66,10 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
 
         var paginationResult = new PaginationResult<ExpandoObject>
         {
-            Items = dataShapingService.ShapeCollectionData(habits, queryParams.Fields),
+            Items = dataShapingService.ShapeCollectionData(
+                habits,
+                queryParams.Fields,
+                h => CreateLinksForHabit(h.Id, queryParams.Fields)),
             Page = queryParams.Page,
             PageSize = queryParams.PageSize,
             TotalCount = totalCount
@@ -96,12 +101,15 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
         {
             return NotFound();
         }
+        var links = CreateLinksForHabit(id, fields);
 
         var shapedObject = dataShapingService.ShapeData(habit, fields);
+        shapedObject.TryAdd("links", links);
 
         return Ok(shapedObject);
 
     }
+
     [HttpPost]
     public async Task<ActionResult<HabitDto>> CreateHabit([FromBody] CreateHabitDto createHabitDto,
         IValidator<CreateHabitDto> validator)
@@ -114,6 +122,9 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
         await dbContext.SaveChangesAsync();
 
         var habitDto = HabitMappings.ToDto(habit);
+
+        var habitLinks = CreateLinksForHabit(habitDto.Id, null);
+        habitDto.Links = habitLinks;
 
         return CreatedAtAction(nameof(GetHabitById), new { habitDto.Id }, habitDto);
 
@@ -173,4 +184,32 @@ public sealed class HabitsController(ApplicationDbContext dbContext) : Controlle
         await dbContext.SaveChangesAsync();
         return NoContent();
     }
+    private List<LinkDto> CreateLinksForHabit(string id, string? fields)
+    {
+        List<LinkDto> links =
+        [
+            linkService.Create(
+                endpointName: nameof(GetHabitById),
+                rel: "self",
+                method: "GET",
+                values: new { id, fields },
+                controller: "Habits"),
+            linkService.Create(
+                endpointName: nameof(UpdateHabit),
+                rel: "update_habit",
+                method: "PUT",
+                values: new { id },
+                controller: "Habits"),
+            linkService.Create(
+                endpointName: nameof(DeleteHabit),
+                rel: "delete_habit",
+                method: "DELETE",
+                values: new { id },
+                controller: "Habits"),
+        ];
+
+        return links;
+    }
 }
+
+
