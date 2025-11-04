@@ -64,16 +64,31 @@ public sealed class HabitsController(
             .Take(queryParams.PageSize)
             .ToListAsync();
 
+
+        bool includeLinks =
+            !string.IsNullOrWhiteSpace(queryParams.Accept) &&
+            queryParams.Accept.Contains(CustomMediaTypeName.Application.HateoasJson, StringComparison.OrdinalIgnoreCase);
+
         var paginationResult = new PaginationResult<ExpandoObject>
         {
             Items = dataShapingService.ShapeCollectionData(
                 habits,
                 queryParams.Fields,
-                h => CreateLinksForHabit(h.Id, queryParams.Fields)),
+                includeLinks ? h => CreateLinksForHabit(h.Id, queryParams.Fields) : null),
             Page = queryParams.Page,
             PageSize = queryParams.PageSize,
-            TotalCount = totalCount
+            TotalCount = totalCount,
         };
+
+        if (includeLinks)
+        {
+            paginationResult.Links = CreateLinksForHabits(
+                queryParams,
+                paginationResult.HasNextPage,
+                paginationResult.HasPreviousPage);
+
+        }
+
 
         return Ok(paginationResult);
     }
@@ -81,6 +96,8 @@ public sealed class HabitsController(
     public async Task<IActionResult> GetHabitById(
         string id,
         string? fields,
+        [FromHeader(Name = "Accept")]
+        string? accept,
         DataShapingService dataShapingService)
     {
 
@@ -101,10 +118,16 @@ public sealed class HabitsController(
         {
             return NotFound();
         }
-        var links = CreateLinksForHabit(id, fields);
 
         var shapedObject = dataShapingService.ShapeData(habit, fields);
-        shapedObject.TryAdd("links", links);
+
+        if (accept == CustomMediaTypeName.Application.HateoasJson)
+        {
+            var links = CreateLinksForHabit(id, fields);
+            shapedObject.TryAdd("links", links);
+
+        }
+
 
         return Ok(shapedObject);
 
@@ -184,6 +207,70 @@ public sealed class HabitsController(
         await dbContext.SaveChangesAsync();
         return NoContent();
     }
+
+    private List<LinkDto> CreateLinksForHabits(
+        HabitQueryParams habitQueryParams,
+        bool hasNextPage,
+        bool hasPreviousPage)
+    {
+        List<LinkDto> links =
+        [
+            linkService.Create(
+                endpointName: nameof(GetHabits),
+                rel: "self",
+                method: "GET",
+                values: new
+                {
+                    page = habitQueryParams.Page,
+                    pageSize = habitQueryParams.PageSize,
+                    fields = habitQueryParams.Fields,
+                    q = habitQueryParams.Search,
+                    sort = habitQueryParams.Sort,
+                    type = habitQueryParams.Type,
+                    status = habitQueryParams.Status
+                }),
+
+                linkService.Create(nameof(CreateHabit), "create_habit", "POST")
+        ];
+
+        if (hasNextPage)
+        {
+            links.Add(
+                linkService.Create(
+                    endpointName: nameof(GetHabits),
+                    rel: "next_page",
+                    method: "GET",
+                    values: new
+                    {
+                        page = habitQueryParams.Page + 1,
+                        pageSize = habitQueryParams.PageSize,
+                        fields = habitQueryParams.Fields,
+                        q = habitQueryParams.Search,
+                        sort = habitQueryParams.Sort,
+                        type = habitQueryParams.Type,
+                        status = habitQueryParams.Status
+                    }));
+        }
+        if (hasPreviousPage)
+        {
+            links.Add(
+                linkService.Create(
+                    endpointName: nameof(GetHabits),
+                    rel: "previous_page",
+                    method: "GET",
+                    values: new
+                    {
+                        page = habitQueryParams.Page - 1,
+                        pageSize = habitQueryParams.PageSize,
+                        fields = habitQueryParams.Fields,
+                        q = habitQueryParams.Search,
+                        sort = habitQueryParams.Sort,
+                        type = habitQueryParams.Type,
+                        status = habitQueryParams.Status
+                    }));
+        }
+        return links;
+    }
     private List<LinkDto> CreateLinksForHabit(string id, string? fields)
     {
         List<LinkDto> links =
@@ -205,7 +292,20 @@ public sealed class HabitsController(
                 rel: "delete_habit",
                 method: "DELETE",
                 values: new { id },
+                controller: "habits"),
+            linkService.Create(
+                endpointName: nameof(PatchHabit),
+                rel: "patch_habit",
+                method: "PATCH",
+                values: new { id },
                 controller: "Habits"),
+            linkService.Create(
+                endpointName: nameof(HabitTagsController.UpsertHabitTags),
+                rel: "upsert_habit_tags",
+                method: "PUT",
+                values: new { habitId = id },
+                HabitTagsController.Name),
+
         ];
 
         return links;
